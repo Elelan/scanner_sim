@@ -46,7 +46,6 @@ export async function sendIntent(dataString: string, selectedDevice: string, sel
 
     // Construct the ADB command using the environment variables
     const command = `adb -s ${selectedDevice} shell am broadcast -a "${adbAction}" --es "${dataStringKey}" "${dataString}" --es "${labelTypeKey}" "${labelWithPrefix}"`;
-    //const command = `adb -s ${selectedDevice} shell am broadcast -a "Sysco.Swms.Mobile.BARCODE" --es com.symbol.datawedge.data_string "${dataString}" --es com.symbol.datawedge.label_type "${labelWithPrefix}"`;
 
     console.log("command: ", command)
 
