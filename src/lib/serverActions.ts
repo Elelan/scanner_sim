@@ -3,6 +3,7 @@
 
 import { exec } from 'child_process';
 import { prisma } from '~/lib/prisma';
+import { encrypt, decrypt } from '~/lib/encryptUtils';
 import { AndroidDevice, Barcode } from '~/types';
 
 export async function sendIntent(dataString: string, selectedDevice: string, selectedLabel: string) {
@@ -12,12 +13,24 @@ export async function sendIntent(dataString: string, selectedDevice: string, sel
 
     console.log("labelType at serverActions: ", selectedLabel)
 
-    // Server-side logic
+    // Decrypt sensitive command parts from generic environment variables
+    const adbAction = process.env.ENCRYPTED_VAR1;  // Previously ENCRYPTED_ADB_ACTION
+    const dataStringKey = process.env.ENCRYPTED_VAR2;  // Previously ENCRYPTED_DATAWEDGE_DATA_STRING
+    const labelTypeKey = process.env.ENCRYPTED_VAR3;  // Previously ENCRYPTED_DATAWEDGE_LABEL_TYPE
+    const labelPrefix = process.env.ENCRYPTED_VAR4;  // Previously ENCRYPTED_LABEL_PREFIX
+
+
+    if (!adbAction || !dataStringKey || !labelTypeKey || !labelPrefix) {
+        throw new Error('Missing ADB command configuration in environment variables');
+    }
+
+    // Server-side logic to check if the barcode exists
     const existingBarcode = await prisma.barcodes.findUnique({
         where: { data: dataString },
     });
 
     if (!existingBarcode) {
+        // If not found, insert a new barcode record
         await prisma.barcodes.create({
             data: {
                 data: dataString,
@@ -26,11 +39,15 @@ export async function sendIntent(dataString: string, selectedDevice: string, sel
         });
     }
 
-    // Prepend "LABEL-TYPE-" to the selected label
-    const labelWithPrefix = `LABEL-TYPE-${selectedLabel}`;
+
+    // Prepend the prefix to the selected label
+    const labelWithPrefix = `${labelPrefix}${selectedLabel}`;
     console.log(labelWithPrefix)
-    const command = `adb -s ${selectedDevice} shell am broadcast -a "Sysco.Swms.Mobile.BARCODE" --es com.symbol.datawedge.data_string "${dataString}" --es com.symbol.datawedge.label_type "${labelWithPrefix}"`;
-    // const command = ""
+
+    // Construct the ADB command using the environment variables
+    const command = `adb -s ${selectedDevice} shell am broadcast -a "${adbAction}" --es "${dataStringKey}" "${dataString}" --es "${labelTypeKey}" "${labelWithPrefix}"`;
+    //const command = `adb -s ${selectedDevice} shell am broadcast -a "Sysco.Swms.Mobile.BARCODE" --es com.symbol.datawedge.data_string "${dataString}" --es com.symbol.datawedge.label_type "${labelWithPrefix}"`;
+
     console.log("command: ", command)
 
     return new Promise<void>((resolve, reject) => {
@@ -57,7 +74,7 @@ export async function fetchDevices(): Promise<AndroidDevice[]> {
                     .filter(line => line.trim())
                     .map(line => line.split('\t')[0]);
 
-                    Promise.all(deviceIds.map(id => getDeviceDetails(id)))
+                Promise.all(deviceIds.map(id => getDeviceDetails(id)))
                     .then(devices => resolve(devices))
                     .catch(err => reject(err));
             }
@@ -66,6 +83,7 @@ export async function fetchDevices(): Promise<AndroidDevice[]> {
 }
 
 export async function getDeviceDetails(deviceId: string): Promise<AndroidDevice> {
+
     return new Promise((resolve, reject) => {
         exec(`adb -s ${deviceId} shell getprop ro.product.model`, (error, model, stderr) => {
             if (error || stderr) {
@@ -93,11 +111,11 @@ export async function getDeviceDetails(deviceId: string): Promise<AndroidDevice>
                             reject(new Error('Failed to retrieve screen size'));
                         }
 
-                         // Extract screen size (e.g., "800x480")
-                         const screenSizeMatch = screenSizeInfo.match(/Physical size: (\d+x\d+)/);
-                         const screenSize = screenSizeMatch ? screenSizeMatch[1] : 'Unknown';
+                        // Extract screen size (e.g., "800x480")
+                        const screenSizeMatch = screenSizeInfo.match(/Physical size: (\d+x\d+)/);
+                        const screenSize = screenSizeMatch ? screenSizeMatch[1] : 'Unknown';
 
-                        
+
                         resolve({
                             id: deviceId,
                             model: model.trim(),
@@ -128,3 +146,14 @@ export async function loadHistory(): Promise<Barcode[]> {
         isPinned: item.isPinned,
     }));
 }
+
+
+export async function deleteHistoryItem(id: number): Promise<void> {
+    await prisma.barcodes.delete({
+      where: { id },
+    });
+  }
+  
+  export async function clearHistory(): Promise<void> {
+    await prisma.barcodes.deleteMany({});
+  }
