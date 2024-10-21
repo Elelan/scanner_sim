@@ -14,10 +14,10 @@ export async function sendIntent(dataString: string, selectedDevice: string, sel
     console.log("labelType at serverActions: ", selectedLabel)
 
     // Decrypt sensitive command parts from generic environment variables
-    const adbAction = process.env.ENCRYPTED_VAR1;  // Previously ENCRYPTED_ADB_ACTION
-    const dataStringKey = process.env.ENCRYPTED_VAR2;  // Previously ENCRYPTED_DATAWEDGE_DATA_STRING
-    const labelTypeKey = process.env.ENCRYPTED_VAR3;  // Previously ENCRYPTED_DATAWEDGE_LABEL_TYPE
-    const labelPrefix = process.env.ENCRYPTED_VAR4;  // Previously ENCRYPTED_LABEL_PREFIX
+    const adbAction = process.env.ENCRYPTED_VAR1;
+    const dataStringKey = process.env.ENCRYPTED_VAR2;
+    const labelTypeKey = process.env.ENCRYPTED_VAR3;
+    const labelPrefix = process.env.ENCRYPTED_VAR4;
 
 
     if (!adbAction || !dataStringKey || !labelTypeKey || !labelPrefix) {
