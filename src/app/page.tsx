@@ -5,6 +5,8 @@ import { useTheme } from 'next-themes';
 import { SnackbarProvider, useSnackbar } from 'notistack';
 import {
   sendIntent,
+  sendScannerStatus,
+  sendHotkeyIntent,
   fetchDevices,
   loadHistory,
   deleteHistoryItem,
@@ -12,13 +14,14 @@ import {
 } from '~/lib/serverActions';
 import { ScannedBarcodeType, ScannedBarcodeTypeKey } from '~/lib/ScannedBarcodeType';
 import { AndroidDevice, Barcode } from '~/types';
-import { prisma } from '~/lib/prisma';
 
 export default function Home() {
 
   const { theme, setTheme } = useTheme();
 
   const { enqueueSnackbar } = useSnackbar();
+
+  const [selectedTab, setSelectedTab] = useState<"barcodes" | "hotkeys">("barcodes");
 
   const [devices, setDevices] = useState<AndroidDevice[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<string>("");
@@ -59,8 +62,6 @@ export default function Home() {
     }
   };
 
-
-
   const loadLabelTypes = async () => {
     const labelTypesArray = Object.keys(ScannedBarcodeType)
     console.log("labelTypesArray", labelTypesArray)
@@ -97,6 +98,20 @@ export default function Home() {
     setSelectedDevice(device);
   };
 
+  const handleSendHotkey = async (keyCode: number) => {
+    if (!selectedDevice) {
+      enqueueSnackbar("Please select a device", { variant: "warning" });
+      return;
+    }
+
+    try {
+      await sendHotkeyIntent(selectedDevice, keyCode);
+      enqueueSnackbar(`Hotkey ${keyCode} sent successfully`, { variant: "success" });
+    } catch (error) {
+      enqueueSnackbar("Failed to send hotkey: " + error.message, { variant: "error" });
+    }
+  };
+
   const handleSendIntent = async () => {
 
     console.log("Data String", dataString)
@@ -114,6 +129,20 @@ export default function Home() {
       enqueueSnackbar('Please enter all required fields.');
     }
 
+  };
+
+  const handleSendScannerStatus = async () => {
+    console.log("Selected Device", selectedDevice);
+    if (selectedDevice) {
+      try {
+        await sendScannerStatus(selectedDevice);
+        enqueueSnackbar("Scanner status intent sent successfully");
+      } catch (error) {
+        enqueueSnackbar("Failed to send scanner status intent: " + error.message);
+      }
+    } else {
+      enqueueSnackbar("Please select a device.");
+    }
   };
 
   const handleResendHistoryItem = async (id: number) => {
@@ -160,118 +189,61 @@ export default function Home() {
 
   return (
     <SnackbarProvider maxSnack={3} anchorOrigin={{ vertical: 'top', horizontal: 'right' }}>
-      <div className="bg-white dark:bg-gray-800 shadow-lg rounded-lg p-8">
+      <div className="bg-red-50 dark:bg-gray-800 shadow-lg rounded-lg p-8">
 
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold mb-6 text-gray-800 dark:text-white">Barcode Scanner Simulator</h1>
+        <div className="mb-6">
+          <div className="flex justify-between items-center">
+            <h1 className="text-3xl font-bold mb-6 text-gray-800 dark:text-white">Barcode Scanner Simulator</h1>
 
-          {/* Theme Switcher */}
-          <select
-            value={theme}
-            onChange={(e) => setTheme(e.target.value)}
-            className="p-2 border rounded bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white"
-          >
-            <option value="system">System</option>
-            <option value="dark">Dark</option>
-            <option value="light">Light</option>
-          </select>
+            {/* Theme Switcher */}
+            <select
+              value={theme}
+              onChange={(e) => setTheme(e.target.value)}
+              className="p-2 border rounded bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white"
+            >
+              <option value="system">System</option>
+              <option value="dark">Dark</option>
+              <option value="light">Light</option>
+            </select>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex border-b">
+            <button
+              className={`p-4 w-1/2 ${selectedTab === "barcodes" ? "border-b-2 border-blue-500 font-bold" : ""}`}
+              onClick={() => setSelectedTab("barcodes")}
+            >
+              Barcodes
+            </button>
+            <button
+              className={`p-4 w-1/2 ${selectedTab === "hotkeys" ? "border-b-2 border-blue-500 font-bold" : ""}`}
+              onClick={() => setSelectedTab("hotkeys")}
+            >
+              Hotkeys
+            </button>
+          </div>
         </div>
 
-        <form className="mb-8" onSubmit={(e) => e.preventDefault()}>
-          <div className="mb-6">
 
-            <label htmlFor="deviceId" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
-              Select Device:
-            </label>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4" id="deviceList">
-
-              {devices.length > 0 ? (
-                devices.map((device) => (
-
-                  <button
-                    key={device.id}
-                    className={`p-4 rounded-lg border-2 cursor-pointer transition-all duration-200 ${selectedDevice === device.id
-                      ? 'border-blue-600 bg-blue-500 dark:bg-blue-800 shadow-lg'
-                      : 'border-gray-300 bg-white hover:shadow-md dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200'
-                      }`}
-                    onClick={() => handleDeviceSelect(device.id)}
-                  >
-                    <h3 className={`text-xl font-semibold ${selectedDevice === device.id ? 'text-white' : 'text-gray-800'}`}>{device.model}</h3>
-                    <p className={`text-sm ${selectedDevice === device.id ? 'text-white' : 'text-gray-600'}`}><strong>ID:</strong> {device.id}</p>
-                    <p className={`text-sm ${selectedDevice === device.id ? 'text-white' : 'text-gray-600'}`}><strong>Android Version:</strong> {device.androidVersion}</p>
-                    <p className={`text-sm ${selectedDevice === device.id ? 'text-white' : 'text-gray-600'}`}><strong>Battery Level:</strong> {device.batteryLevel}%</p>
-                    <p className={`text-sm ${selectedDevice === device.id ? 'text-white' : 'text-gray-600'}`}><strong>Charging:</strong> {device.isCharging ? 'Yes' : 'No'}</p>
-                    <p className={`text-sm ${selectedDevice === device.id ? 'text-white' : 'text-gray-600'}`}><strong>Screen Size:</strong> {device.screenSize}</p>
-                  </button>
-                ))
-              ) : (
-                <small className="text-red-500 dark:text-red-400" id="noDeviceMessage">
-                  No device detected. Please restart ADB.
-                </small>
-              )}
-            </div>
+        {/* Content */}
+        <div className="p-6">
+          {selectedTab === "barcodes" ? (
+            <BarcodeScannerSimulator />
+          ) : (
+            <HotkeysSimulator onSendHotkey={handleSendHotkey} />
+          )}
+        </div>
 
 
-            <input
-              type="text"
-              id="deviceId"
-              className="mt-4 p-3 border rounded w-full focus:ring focus:ring-green-800 focus:border-red-500 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200"
-              placeholder="Enter device ID manually"
-              value={selectedDevice}
-              onChange={(e) => setSelectedDevice(e.target.value)}
-            />
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <div>
-              <label htmlFor="dataString" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Data:
-              </label>
-              <input
-                type="text"
-                id="dataString"
-                name="dataString"
-                className="mt-2 p-3 border rounded w-full bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200"
-                value={dataString}
-                onChange={(e) => setDataString(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSendIntent()}
-              />
-            </div>
-            <div>
-              <label htmlFor="labelType" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Label Type:
-              </label>
-              <select
-                id="labelType"
-                name="labelType"
-                className="mt-2 p-3 border rounded w-full bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200"
-                value={selectedLabel}
-                onChange={(e) => {
-                  console.log("selected label type: ", e.target.value);
-                  setSelectedLabel(e.target.value as ScannedBarcodeTypeKey)
-                }}
-              >
-                {labelTypes.map((labelType, index) => (
-                  <option key={index} value={labelType.key}>
-                    {labelType.key} - {labelType.type}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <button
-            type="button"
-            className={`mt-6 w-full py-3 rounded transition ${dataString.trim() === ''
-              ? 'bg-gray-400 dark:bg-gray-600 cursor-not-allowed text-gray-700 dark:text-gray-300'
-              : 'bg-blue-600 dark:bg-blue-500 text-white hover:bg-blue-700 dark:hover:bg-blue-600'
-              }`}
-            onClick={handleSendIntent}
-            disabled={dataString.trim() === ''}
-          >
-            Send Intent
-          </button>
-        </form>
+        <button
+          type="button"
+          className="mt-4 w-full py-3 rounded bg-green-600 dark:bg-green-500 text-white hover:bg-green-700 dark:hover:bg-green-600"
+          onClick={handleSendScannerStatus}
+        >
+          Send Scanner Status
+        </button>
+
 
         <div className="mb-4">
           <h2
@@ -333,4 +305,136 @@ export default function Home() {
       </div>
     </SnackbarProvider>
   )
+
+  function BarcodeScannerSimulator() {
+    return <div>
+      <form className="mb-8" onSubmit={(e) => e.preventDefault()}>
+        <div className="mb-6">
+
+          <label htmlFor="deviceId" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+            Select Device:
+          </label>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-4" id="deviceList">
+
+            {devices.length > 0 ? (
+              devices.map((device) => (
+
+                <button
+                  key={device.id}
+                  className={`p-4 rounded-lg border-2 cursor-pointer transition-all duration-200 ${selectedDevice === device.id
+                    ? 'border-blue-600 bg-blue-500 dark:bg-blue-800 shadow-lg'
+                    : 'border-gray-300 bg-white hover:shadow-md dark:bg-gray-700 dark:border-gray-600 dark:text-gray-200'
+                    }`}
+                  onClick={() => handleDeviceSelect(device.id)}
+                >
+                  <h3 className={`text-xl font-semibold ${selectedDevice === device.id ? 'text-white' : 'text-gray-800'}`}>{device.model}</h3>
+                  <p className={`text-sm ${selectedDevice === device.id ? 'text-white' : 'text-gray-600'}`}><strong>ID:</strong> {device.id}</p>
+                  <p className={`text-sm ${selectedDevice === device.id ? 'text-white' : 'text-gray-600'}`}><strong>Android Version:</strong> {device.androidVersion}</p>
+                  <p className={`text-sm ${selectedDevice === device.id ? 'text-white' : 'text-gray-600'}`}><strong>Battery Level:</strong> {device.batteryLevel}%</p>
+                  <p className={`text-sm ${selectedDevice === device.id ? 'text-white' : 'text-gray-600'}`}><strong>Charging:</strong> {device.isCharging ? 'Yes' : 'No'}</p>
+                  <p className={`text-sm ${selectedDevice === device.id ? 'text-white' : 'text-gray-600'}`}><strong>Screen Size:</strong> {device.screenSize}</p>
+                </button>
+              ))
+            ) : (
+              <small className="text-red-500 dark:text-red-400" id="noDeviceMessage">
+                No device detected. Please restart ADB.
+              </small>
+            )}
+          </div>
+
+
+          <input
+            type="text"
+            id="deviceId"
+            className="mt-4 p-3 border rounded w-full focus:ring focus:ring-green-800 focus:border-red-500 bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200"
+            placeholder="Enter device ID manually"
+            value={selectedDevice}
+            onChange={(e) => setSelectedDevice(e.target.value)}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div>
+            <label htmlFor="dataString" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Data:
+            </label>
+            <input
+              type="text"
+              id="dataString"
+              name="dataString"
+              className="mt-2 p-3 border rounded w-full bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200"
+              value={dataString}
+              onChange={(e) => setDataString(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSendIntent()}
+            />
+          </div>
+          <div>
+            <label htmlFor="labelType" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Label Type:
+            </label>
+            <select
+              id="labelType"
+              name="labelType"
+              className="mt-2 p-3 border rounded w-full bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-800 dark:text-gray-200"
+              value={selectedLabel}
+              onChange={(e) => {
+                console.log("selected label type: ", e.target.value);
+                setSelectedLabel(e.target.value as ScannedBarcodeTypeKey)
+              }}
+            >
+              {labelTypes.map((labelType, index) => (
+                <option key={index} value={labelType.key}>
+                  {labelType.key} - {labelType.type}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        <button
+          type="button"
+          className={`mt-6 w-full py-3 rounded transition ${dataString.trim() === ''
+            ? 'bg-gray-400 dark:bg-gray-600 cursor-not-allowed text-gray-700 dark:text-gray-300'
+            : 'bg-blue-600 dark:bg-blue-500 text-white hover:bg-blue-700 dark:hover:bg-blue-600'
+            }`}
+          onClick={handleSendIntent}
+          disabled={dataString.trim() === ''}
+        >
+          Send Intent
+        </button>
+      </form>
+    </div>;
+  }
+
+  function HotkeysSimulator({ onSendHotkey }: { onSendHotkey: (keyCode: number) => void }) {
+    const hotkeys = [
+      { label: "F1", code: 131 }, // KeyEvent.KEYCODE_F1
+      { label: "F2", code: 132 },
+      { label: "F3", code: 133 },
+      { label: "F4", code: 134 },
+      { label: "F5", code: 135 },
+      { label: "F6", code: 136 },
+      { label: "F7", code: 137 },
+      { label: "F8", code: 138 },
+      { label: "F9", code: 139 },
+      { label: "Ctrl+K", code: 45 },
+      { label: "Ctrl+P", code: 44 },
+      { label: "Ctrl+N", code: 42 },
+      { label: "Ctrl+L", code: 40 },
+    ];
+
+    return (
+      <div className="grid grid-cols-4 gap-4">
+        {hotkeys.map((hotkey) => (
+          <button
+            key={hotkey.code}
+            className="bg-gray-300 hover:bg-gray-400 text-black font-bold py-4 px-6 rounded-lg shadow-lg transition"
+            onClick={() => onSendHotkey(hotkey.code)}
+          >
+            {hotkey.label}
+          </button>
+        ))}
+      </div>
+    );
+  }
 }
