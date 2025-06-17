@@ -61,6 +61,70 @@ export async function sendIntent(dataString: string, selectedDevice: string, sel
     });
 }
 
+export async function sendScannerStatus(selectedDevice: string) {
+    if (!selectedDevice) {
+        throw new Error('Missing required field: selectedDevice');
+    }
+
+    // Decrypt sensitive command parts from environment variables
+    const adbAction = process.env.ENCRYPTED_VAR5; // Use a new environment variable for scanner status action
+
+    if (!adbAction) {
+        throw new Error('Missing ADB command configuration for scanner status');
+    }
+
+    // Hardcoded payload from logs
+    const payload = {
+        "DATAWEDGE": "8.2.708",
+        "BARCODE_SCANNING": "28.13.2.0",
+        "DECODER_LIBRARY": "N/A",
+        "SCANNER_FIRMWARE": "RS5100 Bluetooth Scanner:PAAEXS00-001-R07"
+    };
+
+    // Construct the ADB command
+    const command = `adb -s ${selectedDevice} shell am broadcast -a "${adbAction}" \
+    --es DATAWEDGE "${payload.DATAWEDGE}" \
+    --es BARCODE_SCANNING "${payload.BARCODE_SCANNING}" \
+    --esa SCANNER_FIRMWARE "${payload.SCANNER_FIRMWARE}"`;
+
+    //--es DECODER_LIBRARY "${payload.DECODER_LIBRARY}" \
+
+    console.log("Scanner status command: ", command);
+
+    return new Promise<void>((resolve, reject) => {
+        exec(command, (error, stdout, stderr) => {
+            if (error || stderr) {
+                console.error(error || stderr);
+                reject(new Error("Command execution failed"));
+            } else {
+                resolve();
+            }
+        });
+    });
+}
+
+export async function sendHotkeyIntent(selectedDevice: string, keyCode: number) {
+    if (!selectedDevice) {
+      throw new Error("Missing required field: selectedDevice");
+    }
+  
+    const command = `adb -s ${selectedDevice} shell input keyevent ${keyCode}`;
+  
+    console.log("Sending hotkey command: ", command);
+  
+    return new Promise<void>((resolve, reject) => {
+      exec(command, (error, stdout, stderr) => {
+        if (error || stderr) {
+          console.error(error || stderr);
+          reject(new Error("Command execution failed"));
+        } else {
+          resolve();
+        }
+      });
+    });
+  }
+
+
 export async function fetchDevices(): Promise<AndroidDevice[]> {
     return new Promise((resolve, reject) => {
         exec('adb devices', (error, stdout, stderr) => {
