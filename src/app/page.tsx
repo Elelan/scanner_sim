@@ -68,6 +68,7 @@ export default function Home() {
 
   useEffect(() => {
     setShowHotKeysHint(selectedTab === "hotkeys");
+    setShowCommandHistory(selectedTab === "barcodes");
   }, [selectedTab]);
 
   const loadLabelTypes = async () => {
